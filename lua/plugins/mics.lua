@@ -3,7 +3,7 @@ return {
     'saecki/crates.nvim',
     tag = 'stable',
     config = function()
-      require('crates').setup()
+      require('crates').setup {}
     end,
   },
   {
@@ -13,7 +13,7 @@ return {
         strategy = {
           'toggleterm',
           use_shell = true,
-          quit_on_exit = false,
+          quit_on_exit = 'never',
           close_on_exit = false,
         },
       }
