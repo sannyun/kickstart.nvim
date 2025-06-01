@@ -1,6 +1,8 @@
 return {
   {
     'Civitasv/cmake-tools.nvim',
+    ft = { 'cpp', 'c', 'cmake' },
+    cmd = 'CMakeBuild',
     opts = {},
     config = function()
       local osys = require 'cmake-tools.osys'
