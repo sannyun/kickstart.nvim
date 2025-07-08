@@ -76,7 +76,7 @@ vim.o.scrolloff = 10
 
 vim.o.winborder = 'rounded'
 
-if vim.fn.has 'win32' then
+if vim.fn.has 'win32' == 1 then
   local powershell_options = {
     shell = vim.fn.executable 'pwsh' == 1 and 'pwsh' or 'powershell',
     shellcmdflag = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;',
