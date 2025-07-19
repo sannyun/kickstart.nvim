@@ -1,4 +1,4 @@
-vim.o.colorcolumn = '120'
+vim.o.colorcolumn = '100'
 
 -- Set <space> as the leader key
 -- See `:help mapleader`
