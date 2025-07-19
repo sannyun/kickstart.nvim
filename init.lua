@@ -268,6 +268,21 @@ require('lazy').setup({
         return '%2l:%-2v'
       end
 
+      require('mini.files').setup {
+        windows = {
+          preview = true,
+        },
+      }
+      vim.keymap.set('n', '\\', function()
+        local MiniFiles = require 'mini.files'
+        if not MiniFiles.close() then
+          local bufname = vim.api.nvim_buf_get_name(0)
+          local path = vim.fn.filereadable(bufname) == 1 and bufname or vim.fn.getcwd()
+          MiniFiles.open(path)
+          MiniFiles.reveal_cwd()
+        end
+      end)
+
       -- ... and there is more!
       --  Check out: https://github.com/echasnovski/mini.nvim
     end,
