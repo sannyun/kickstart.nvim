@@ -216,6 +216,7 @@ return {
       --  - settings (table): Override the default settings passed when initializing the server.
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
+        neocmakelsp = {},
         clangd = {},
         -- gopls = {},
         -- pyright = {},
@@ -265,6 +266,7 @@ return {
         'codelldb',
         'clang-format',
         'taplo',
+        'gersemi',
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
@@ -320,6 +322,7 @@ return {
         json = { 'jq' },
         cpp = { 'clang-format' },
         toml = { 'taplo' },
+        cmake = { 'gersemi' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
         --
