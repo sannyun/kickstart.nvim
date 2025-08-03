@@ -274,6 +274,9 @@ require('lazy').setup({
       require('mini.files').setup {
         windows = {
           preview = true,
+          width_preview = 100,
+          width_focus = 40,
+          max_number = 3,
         },
       }
       vim.keymap.set('n', '\\', function()
