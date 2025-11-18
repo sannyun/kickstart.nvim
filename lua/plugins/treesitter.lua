@@ -8,7 +8,8 @@ return {
     branch = 'main',
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter-intro`
     config = function()
-      local parsers = { 'bash', 'c', 'cpp', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'rust', 'zig' }
+      local parsers =
+        { 'bash', 'c', 'cpp', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'rust', 'zig', 'glsl', 'just' }
       require('nvim-treesitter').install(parsers)
 
       vim.api.nvim_create_autocmd('FileType', {
