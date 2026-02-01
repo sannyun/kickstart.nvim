@@ -195,6 +195,7 @@ return {
         virtual_lines = {
           current_line = true,
         },
+        jump = { float = true },
       }
 
       -- LSP servers and clients are able to communicate to each other what features they support.
