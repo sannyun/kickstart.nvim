@@ -79,7 +79,7 @@ vim.o.winborder = 'rounded'
 vim.o.termguicolors = true
 
 vim.o.title = true
-vim.o.titlestring = '%(%{fnamemodify(getcwd(),":t")} %)%( | %.30{expand("%:~:.")}%)'
+vim.o.titlestring = '%(%{fnamemodify(getcwd(), ":~")}%)'
 
 if vim.fn.has 'win32' == 1 then
   local powershell_options = {
