@@ -92,7 +92,7 @@ return {
       vim.keymap.set('n', '<leader>ttv', ':ToggleTerm<cr>:ToggleTerm direction=vertical<cr>', { desc = '[T]oggle[T]erm [V]ertical' })
       vim.keymap.set('n', '<leader>ttf', ':ToggleTerm<cr>:ToggleTerm direction=float<cr>', { desc = '[T]oggle[T]erm [F]loat' })
 
-      vim.keymap.set({ 'n', 't' }, '<F9>', '<cmd>ToggleTerm<cr>', { desc = 'Toggle Term' })
+      -- vim.keymap.set({ 'n', 't' }, '<F9>', '<cmd>ToggleTerm<cr>', { desc = 'Toggle Term' })
 
       vim.keymap.set({ 'n', 't' }, '<F8>', function()
         go_next_term()
