@@ -75,8 +75,7 @@ function M.setup(event)
       })
     end
 
-    -- Use vim.lsp.buf_request to handle routing to the correct client
-    vim.lsp.buf_request(0, 'rust-analyzer/expandMacro', params, response_handler)
+    active_client:request('rust-analyzer/expandMacro', params, response_handler, 0)
   end, '[R]ust [E]xpand Macro')
 end
 

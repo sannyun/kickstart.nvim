@@ -161,7 +161,6 @@ return {
           --   vim.lsp.completion.enable(true, client.id, event.buf, { autotrigger = true })
           -- end
 
-          -- Load language-specific keybindings
           require('plugins.lsp.rust').setup(event)
         end,
       })
