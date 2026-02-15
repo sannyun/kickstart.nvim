@@ -22,10 +22,10 @@ local function send_request(method, callback)
   active_client:request(method, params, callback, bufnr)
 end
 
---- Request test runnables from rust-analyzer at the cursor position,
---- filter for tests, and pass the selected runnable to the callback.
----@param callback fun(test: table)
-local function get_test_runnable(callback)
+--- Request runnables from rust-analyzer at the cursor position,
+--- filter for actionable targets (run/test/doctest), and pass the selected runnable to the callback.
+---@param callback fun(runnable: table)
+local function get_runnable(callback)
   send_request('experimental/runnables', function(err, result)
     if err ~= nil then
       vim.notify('Failed to get runnables: ' .. vim.inspect(err), vim.log.levels.ERROR)
@@ -37,20 +37,21 @@ local function get_test_runnable(callback)
       return
     end
 
-    local tests = vim.tbl_filter(function(runnable)
-      return runnable.label:match '^test' or runnable.label:match '^doctest'
+    local targets = vim.tbl_filter(function(runnable)
+      local label = runnable.label
+      return label:match '^test ' or label:match '^doctest' or label:match '^cargo run'
     end, result)
 
-    if #tests == 0 then
-      vim.notify('No tests found at cursor position', vim.log.levels.WARN)
+    if #targets == 0 then
+      vim.notify('No runnable targets found at cursor position', vim.log.levels.WARN)
       return
     end
 
-    if #tests == 1 then
-      callback(tests[1])
+    if #targets == 1 then
+      callback(targets[1])
     else
-      vim.ui.select(tests, {
-        prompt = 'Select test:',
+      vim.ui.select(targets, {
+        prompt = 'Select runnable:',
         format_item = function(item)
           return item.label
         end,
@@ -83,12 +84,20 @@ local function build_cargo_cmd(args, extra_cargo_args)
   return cmd
 end
 
---- Build the test binary with --no-run and parse JSON output to find the executable path.
+--- Build the binary without running and parse JSON output to find the executable path.
+--- Handles both test (`--no-run`) and run (replace with `build`) runnables.
 --- Calls callback(executable_path) on success, or notifies on failure.
 ---@param args table
 ---@param callback fun(executable: string)
-local function discover_test_binary(args, callback)
-  local cmd = build_cargo_cmd(args, { '--no-run', '--message-format=json' })
+local function discover_binary(args, callback)
+  local extra_args = { '--message-format=json' }
+  if args.cargoArgs[1] == 'run' then
+    args = vim.deepcopy(args)
+    args.cargoArgs[1] = 'build'
+  else
+    table.insert(extra_args, 1, '--no-run')
+  end
+  local cmd = build_cargo_cmd(args, extra_args)
 
   local output = {}
   vim.fn.jobstart(cmd, {
@@ -133,6 +142,93 @@ local function discover_test_binary(args, callback)
   })
 end
 
+local function expand_macro(err, result)
+  if err ~= nil then
+    vim.notify('Macro expansion failed: ' .. vim.inspect(err), vim.log.levels.ERROR)
+    return
+  end
+
+  if not result or not result.expansion then
+    vim.notify('No macro at cursor position', vim.log.levels.WARN)
+    return
+  end
+
+  local lines = {}
+  table.insert(lines, '// Macro expansion for ' .. result.name)
+  table.insert(lines, '')
+
+  vim.list_extend(lines, vim.split(result.expansion, '\n', { trimempty = true }))
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value('filetype', 'rust', { buf = buf })
+
+  local width = math.ceil(math.min(vim.o.columns, math.max(80, vim.o.columns - 20)))
+  local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
+  local row = math.ceil(vim.o.lines - height) * 0.5 - 1
+  local col = math.ceil(vim.o.columns - width) * 0.5 - 1
+  vim.api.nvim_open_win(buf, true, {
+    relative = 'editor',
+    width = width,
+    height = height,
+    col = col,
+    row = row,
+    anchor = 'NW',
+    border = 'single',
+    style = 'minimal',
+  })
+end
+
+local function run_runnable(runnable)
+  local cmd = build_cargo_cmd(runnable.args)
+  local is_test = runnable.label:match '^test ' or runnable.label:match '^doctest'
+
+  vim.cmd 'split'
+  local term_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, term_buf)
+  vim.fn.jobstart(cmd, {
+    term = true,
+    cwd = runnable.args.workspaceRoot,
+    on_exit = function(_, exit_code)
+      if is_test then
+        if exit_code == 0 then
+          vim.notify('Test passed: ' .. runnable.label, vim.log.levels.INFO)
+        else
+          vim.notify('Test failed: ' .. runnable.label, vim.log.levels.ERROR)
+        end
+      else
+        if exit_code == 0 then
+          vim.notify('Finished: ' .. runnable.label, vim.log.levels.INFO)
+        else
+          vim.notify('Exited with code ' .. exit_code .. ': ' .. runnable.label, vim.log.levels.ERROR)
+        end
+      end
+    end,
+  })
+end
+
+local function debug_runnable(runnable)
+  vim.notify('Building binary...', vim.log.levels.INFO)
+
+  discover_binary(runnable.args, function(executable)
+    local run_args = {}
+    if runnable.args.executableArgs and #runnable.args.executableArgs > 0 then
+      vim.list_extend(run_args, runnable.args.executableArgs)
+    end
+
+    local dap = require 'dap'
+    dap.run {
+      type = 'codelldb',
+      request = 'launch',
+      name = 'Debug: ' .. runnable.label,
+      program = executable,
+      args = run_args,
+      cwd = runnable.args.workspaceRoot,
+      stopOnEntry = false,
+    }
+  end)
+end
+
 function M.setup(event)
   -- Only setup keybindings for Rust files
   if vim.bo[event.buf].filetype ~= 'rust' then
@@ -152,89 +248,16 @@ function M.setup(event)
   end
 
   map('<leader>re', function()
-    send_request('rust-analyzer/expandMacro', function(err, result)
-      if err ~= nil then
-        vim.notify('Macro expansion failed: ' .. vim.inspect(err), vim.log.levels.ERROR)
-        return
-      end
-
-      if not result or not result.expansion then
-        vim.notify('No macro at cursor position', vim.log.levels.WARN)
-        return
-      end
-
-      local lines = {}
-      table.insert(lines, '// Macro expansion for ' .. result.name)
-      table.insert(lines, '')
-
-      vim.list_extend(lines, vim.split(result.expansion, '\n', { trimempty = true }))
-
-      local buf = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.api.nvim_set_option_value('filetype', 'rust', { buf = buf })
-
-      local width = math.ceil(math.min(vim.o.columns, math.max(80, vim.o.columns - 20)))
-      local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
-      local row = math.ceil(vim.o.lines - height) * 0.5 - 1
-      local col = math.ceil(vim.o.columns - width) * 0.5 - 1
-      vim.api.nvim_open_win(buf, true, {
-        relative = 'editor',
-        width = width,
-        height = height,
-        col = col,
-        row = row,
-        anchor = 'NW',
-        border = 'single',
-        style = 'minimal',
-      })
-    end)
+    send_request('rust-analyzer/expandMacro', expand_macro)
   end, '[R]ust [E]xpand Macro')
 
-  map('<leader>rt', function()
-    get_test_runnable(function(test)
-      local cmd = build_cargo_cmd(test.args)
-
-      vim.cmd 'split'
-      local term_buf = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_win_set_buf(0, term_buf)
-      vim.fn.jobstart(cmd, {
-        term = true,
-        cwd = test.args.workspaceRoot,
-        on_exit = function(_, exit_code)
-          if exit_code == 0 then
-            vim.notify('Test passed: ' .. test.label, vim.log.levels.INFO)
-          else
-            vim.notify('Test failed: ' .. test.label, vim.log.levels.ERROR)
-          end
-        end,
-      })
-    end)
-  end, '[R]un [T]est')
+  map('<leader>rr', function()
+    get_runnable(run_runnable)
+  end, '[R]ust [R]un')
 
   map('<leader>rd', function()
-    get_test_runnable(function(test)
-      vim.notify('Building test binary...', vim.log.levels.INFO)
-
-      discover_test_binary(test.args, function(executable)
-        -- Build the args to pass to the test binary to select the specific test
-        local test_args = {}
-        if test.args.executableArgs and #test.args.executableArgs > 0 then
-          vim.list_extend(test_args, test.args.executableArgs)
-        end
-
-        local dap = require 'dap'
-        dap.run {
-          type = 'codelldb',
-          request = 'launch',
-          name = 'Debug: ' .. test.label,
-          program = executable,
-          args = test_args,
-          cwd = test.args.workspaceRoot,
-          stopOnEntry = false,
-        }
-      end)
-    end)
-  end, '[R]ust [D]ebug Test')
+    get_runnable(debug_runnable)
+  end, '[R]ust [D]ebug')
 end
 
 return M
